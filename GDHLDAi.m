@@ -11,14 +11,14 @@
 %
 % The implementation includes the main algorithmic improvements introduced
 % in the improved GDHLDA framework:
-%   - random initialization,
-%   - Riemannian gradient normalization,
-%   - adaptive step size with random relaxation,
-%   - orthogonality-based conditional retraction,
-%   - QR/SVD retraction options.
+%   - random initialization
+%   - Riemannian gradient normalization
+%   - adaptive step size with random relaxation
+%   - orthogonality-based conditional retraction
+%   - QR/SVD retraction options
 %
 % Input:
-%   A CSV file containing feature vectors and class labels.
+%   A CSV file containing feature vectors and class labels
 %
 % Output:
 %   W      - projection matrix with orthonormal columns
@@ -30,8 +30,8 @@
 %   Oh, M., Oh, C., and Tabassum, E.
 %   "Covalent: Interpretable and Discriminative Collective Variables
 %   Reveal Ligand-Dependent Switching in Human Cellular Retinol-Binding
-%   Protein 2."
-%   Journal of Chemical Theory and Computation, 2025.
+%   Protein 2"
+%   Journal of Chemical Theory and Computation, 2025
 %   DOI: 10.1021/acs.jctc.5c01402
 % =========================================================================
 clc; clear; close;
