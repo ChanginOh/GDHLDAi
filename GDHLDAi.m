@@ -4,7 +4,7 @@
 %
 % This script implements an improved version of GDHLDA
 % (gradient descent-based multiclass harmonic linear discriminant analysis)
-% for supervised dimensionality reduction. The method learns an
+% for supervised dimensionality reduction. This method computes an
 % orthonormal basis W on the Stiefel manifold by minimizing a harmonic
 % trace-ratio objective that combines a harmonic within-class scatter
 % matrix with pairwise between-class scatter matrices.
@@ -40,24 +40,26 @@ format long
 %% User Setting
 r = 2;              % Number of eigenvectors
 eta = 1e-3;         % Initial step size
-q = inf;            % Maximum step size
+q = inf;            % Upper bound on step size growth
+a = -0.9;           % Lower bound of relaxation parameter (a > -1)
+b = 1.5;            % Upper bound of relaxation parameter (b > a)
 stol = eps();       % Division tolerance
 otol = eps();       % Orthogonality criterion
-ftol = eps();       % Convergence criterion (using function value)
-gtol = eps();       % Convergence criterion (using gradient)
-etamin = eps();     % Convergence criterion (using step size)
-miniter = 500;      % Minimum convergence criterion (using iterations)
-maxiter = 10000;    % Maximum convergence criterion (using iterations)
+ftol = eps();       % Convergence criterion (function value)
+gtol = eps();       % Convergence criterion (gradient)
+etamin = eps();     % Convergence criterion (step size)
+miniter = 100;      % Minimum convergence criterion
+maxiter = 1000;     % Maximum convergence criterion
 
-%% Helper functions
-symm  = @(W) 0.5*(W + W');          % symmetric matrix
+%% Helper Functions
+symm = @(W) 0.5*(W + W');           % symmetric matrix
 proj = @(W, Z) Z - W*symm(W'*Z);    % projection of Z to tangent space at W
 
 %% Dataset Preprocessing
 % Load dataset from uploaded file
-T = readtable('.\ca_atoms\final_bpso_mi.csv');
-X = T{:, 1:13};
-Y = T{:, 14};
+T = readtable('example.csv');
+X = T{:, 1:3};  % features
+Y = T{:, 4};    % labels
 
 % Find size of dataset (number of samples and number of features)
 [n, p] = size(X);
@@ -74,17 +76,17 @@ mu = zeros(nc, p);
 Sw = zeros(p);
 for k = 1:nc
     ind = find(Y == c(k));
-    ncs(k) = length(ind);           % Class sizes
-    mu(k, :) = mean(X(ind, :), 1);  % Class mean vectors
+    ncs(k) = length(ind);           % class sizes
+    mu(k, :) = mean(X(ind, :), 1);  % class mean vectors
 
     Sk = zeros(p);
     for i = 1:ncs(k)
         Xc = X(ind(i), :) - mu(k, :);
         Sk = Sk + Xc'*Xc;
     end
-    Sw = Sw + inv(Sk);
+    Sw = Sw + pinv(Sk);
 end
-Sw = inv(Sw);
+Sw = pinv(Sw);
 
 %% Riemmanian Gradient Descent
 % Initialize W on Stiefel
@@ -94,7 +96,7 @@ W = retr(randn(p, r), zeros(p, r), "QR");
 Jvals = nan(maxiter+1, 1);
 
 % Store initial function value
-Jvals(1) = J(W, nc, ncs, mu, Sw);
+Jvals(1) = J(W, nc, ncs, mu, Sw, stol);
 
 % Compute initial Euclidean gradient
 grad = zeros(p, r);
@@ -108,22 +110,21 @@ for k = 1:nc-1
     end
 end
 
-% Normalize initial Riemannian gradient (projecting Euclidean gradient to tangent space)
+% Compute and normalize initial Riemannian gradient
 xi = proj(W, grad);
 xih = xi/max(norm(xi, 'fro'), stol);
 
 % Main loop
 for counter = 1:maxiter
-
     % Store old state
-    xio = xi;               % previous Riemannian gradient
-    xiho = xih;             % previous normalized Riemannian gradient
-    Jo = Jvals(counter);    % previous objective function value
+    xio = xi;               % old Riemannian gradient
+    xiho = xih;             % old normalized Riemannian gradient
+    Jo = Jvals(counter);    % old function value
 
     % Update W on tangent space using gradient descent method
     Wtrial = W - eta*xih;
 
-    % Check orthogonality to perform retraction
+    % Check orthogonality for retraction
     org = norm(Wtrial'*Wtrial - eye(r), 'fro') / norm(eye(r), 'fro');
     if org > otol
         W = retr(W, -eta*xih, "QR");
@@ -132,9 +133,13 @@ for counter = 1:maxiter
     end
 
     % Store current objective function value
-    Jw = J(W, nc, ncs, mu, Sw);
+    Jw = J(W, nc, ncs, mu, Sw, stol);
     Jvals(counter+1) = Jw;
-    fprintf('Iter: %d, J: %.15e, eta: %.5e\n', counter, Jw, eta);
+    
+    % Display progress
+    if mod(counter, 50) == 0
+        fprintf('Iteration: %d, J: %.15e, Stepsize: %.5e\n', counter, Jw, eta);
+    end
 
     % Compute new Euclidean gradient
     grad = zeros(p, r);
@@ -152,22 +157,23 @@ for counter = 1:maxiter
     xi = proj(W, grad);
     xih = xi/max(norm(xi, 'fro'), stol);
 
-    % Perform vector transport via projection transport for step adaptation
-    xioT  = proj(W, xio);     % transport old Riemannian gradient to T_W
-    xihoT = proj(W, xiho);    % transport old normalized Riemannian gradient to T_W
+    % Perform (extrinsic) vector transport via projection transport for step adaptation
+    xioT = proj(W, xio);    % transport old Riemannian gradient to T_W
+    xihoT = proj(W, xiho);  % transport old normalized Riemannian gradient to T_W
     
     % Perform random step adaptation with relaxation
-    alpha = -0.9 + (1.5 + 0.9) * rand;
+    alpha = a+(b-a)*rand;
     numerator = (1+alpha)*abs(trace(xioT'*xihoT));
     denominator = abs(trace(xioT'*xihoT) - trace(xi'*xihoT));
-    denominator = max(denominator, stol);  % safeguard (avoid division by 0)
+    denominator = max(denominator, stol);
 
     if  numerator > q*denominator
         eta = sqrt(q)*eta;
     else
         eta = sqrt(numerator / denominator)*eta;
     end
-
+    
+    % Check convergence
     if counter >= miniter
         if abs(Jw - Jo)/max(1, abs(Jo)) < ftol
             break
@@ -179,9 +185,13 @@ for counter = 1:maxiter
     end
 end
 
+% Display fianl results
+fprintf('[Iteration] %d, [J] %.15e, [Stepsize] %.5e\n', counter, Jw, eta);
+
 % Trim Jvals to actual length
 Jvals = Jvals(1:counter+1);
 
+%% Results
 % Export W
 % save('W', 'W')
 
@@ -193,20 +203,22 @@ ylabel("Function Value")
 title("Convergence Curve")
 grid on
 
+%% Important Functions
 % Define objective function
-function f = J(W, nc, ncs, mu, Sw)
+function f = J(W, nc, ncs, mu, Sw, stol)
 f = 0;
+trSw = trace(W'*Sw*W);
 for k = 1:nc-1
     for l = k+1:nc
         Bkl = (mu(k, :) - mu(l, :))'*(mu(k, :) - mu(l, :));
-        f = f + ncs(k)*ncs(l)*trace(W'*Sw*W) / max(trace(W'*Bkl*W), eps());
+        trBkl = trace(W'*Bkl*W);
+        f = f + ncs(k)*ncs(l)*trSw / max(trBkl, stol);
     end
 end
 end
 
 function X = retr(W, xi, flag)
 % QR is usually faster than SVD when r << p
-% It produces an orthonormal basis for the column space of W directly
     if nargin < 3 || isempty(flag)
         flag = "SVD";   % default choice
     end
