@@ -36,7 +36,6 @@ described in the following work:
   DOI: 10.1021/acs.jctc.5c01402
 =========================================================================
 """
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -58,7 +57,7 @@ miniter = 100                   # Minimum iterations
 maxiter = 1000                  # Maximum iterations
 
 # ==============================
-# Helper functions
+# Helper Functions
 # ==============================
 def symm(W):
     """Symmetric matrix"""
