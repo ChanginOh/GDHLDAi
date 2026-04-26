@@ -99,8 +99,7 @@ def J(W, nc, ncs, mu, Sw, stol):
 # Dataset Preprocessing
 # ==============================
 # Load dataset
-# df = pd.read_csv('example.csv')
-df = pd.read_csv('synthetic_3d_clusters.csv')
+df = pd.read_csv('example.csv')
 X = df.iloc[:, 0:3].values  # features
 Y = df.iloc[:, 3].values    # labels
 
